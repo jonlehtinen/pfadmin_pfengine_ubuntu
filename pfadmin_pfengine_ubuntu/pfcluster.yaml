@@ -1,0 +1,51 @@
+version: "3.5"
+services:
+  pfadmin:
+    image: jrlehtinen/pfadmin:overlay
+    deploy:
+      placement:
+        constraints: [node.role == manager]
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.85"
+          memory: 3200M
+    ports:
+      - "9999:9999"
+      - "7600:7600"
+      - "7601:7601"
+      - "7500:7500"
+      - "7700:7700"
+      - "9031:9031"
+    networks:
+      - pfnet
+  pfengine:
+    image: jrlehtinen/pfengine:overlay
+    deploy:
+      replicas: 2
+      restart_policy:
+        condition: on-failure
+      resources:
+        limits:
+          cpus: "0.85"
+          memory: 3200M
+    ports:
+      - "9919:9999"
+      - "7610:7600"
+      - "7611:7601"
+      - "7510:7500"
+      - "7710:7700"
+      - "9131:9031"
+    networks:
+      - pfnet
+networks:
+  pfnet:
+    driver: overlay
+    attachable: true
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16
+
+
