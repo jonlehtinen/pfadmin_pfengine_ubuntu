@@ -24,3 +24,7 @@ image with that zipped directory replacing the original pingfederate-9.0.2.zip f
 in my docker cloud repository. With creative scripting, one could arrange for this process to occur automatically so 
 new admin container images with complete configurations could be created at intervals for convenient redeployment of the 
 pfadmin service/instance.
+
+Additional items to consider:
+1) Add additional IPs in run.properties within the subnet range for the pfnet overlay network for discovery if clusters are cycled through very rapidly to ensure continuity of replication.
+2) If deploying in AWS, enable dhynamic discovery and configure a S3 bucket for discovery in the tcp.xml file as indicated in run.properties.
