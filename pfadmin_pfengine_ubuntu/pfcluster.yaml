@@ -1,7 +1,7 @@
 version: "3.5"
 services:
   pfadmin:
-    image: jrlehtinen/pfadmin:overlay
+    image: jrlehtinen/pfadmin:redadaptive
     deploy:
       placement:
         constraints: [node.role == manager]
@@ -13,19 +13,14 @@ services:
           #memory: 3200M
     ports:
       - "9999:9999"
-      - "7610:7600"
-      - "7611:7601"
-      - "7510:7500"
-      - "7710:7700"
-      - "9131:9031"
     networks:
       - pfnet
   pfengine:
-    image: jrlehtinen/pfengine:overlay
+    image: jrlehtinen/pfengine:adaptive
     deploy:
-      placement:
-        constraints: [node.role == worker]
-      replicas: 4
+      #placement:
+        #constraints: [node.role == worker]
+      replicas: 6
       restart_policy:
         condition: on-failure
       #resources:
@@ -33,11 +28,6 @@ services:
           #cpus: "0.85"
           #memory: 3200M
     ports:
-      - "9919:9999"
-      - "7600:7600"
-      - "7601:7601"
-      - "7500:7500"
-      - "7700:7700"
       - "9031:9031"
     networks:
       - pfnet
