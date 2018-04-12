@@ -14,7 +14,7 @@ COPY run.properties /opt
 
 # add configuration export if this is replacing existing configuration
 # note that this WILL NOT auto-import the license file
-COPY data.zip /opt
+#COPY data.zip /opt
 
 # extract binaries
 RUN unzip pingfederate-9.0.2.zip
@@ -29,7 +29,7 @@ RUN cp -t /opt/pingfederate-9.0.2/pingfederate/bin /opt/run.properties
 #RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/conf /opt/tcp.xml
 
 # load saved configuration if this replaces existing configuration
-RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/data/drop-in-deployer /opt/data.zip
+#RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/data/drop-in-deployer /opt/data.zip
 
 #Create logs on host
 #VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.0.2/pingfederate/log  
@@ -38,7 +38,7 @@ RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/data/drop-in-deplo
 RUN rm /opt/pingfederate-9.0.2.zip && rm /opt/server-jre-8u162-linux-x64.tar.gz && rm /opt/run.properties
 
 # cleanup of old config if used
-RUN rm /opt/data.zip 
+#RUN rm /opt/data.zip 
 
 # set JAVA_HOME
 ENV JAVA_HOME /opt/jdk1.8.0_162
