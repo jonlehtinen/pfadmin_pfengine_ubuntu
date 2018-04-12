@@ -10,6 +10,7 @@ WORKDIR /opt
 COPY server-jre-8u162-linux-x64.tar.gz /opt
 ADD pingfederate-9.0.2.zip /opt
 COPY run.properties /opt
+#COPY tcp.xml /opt
 
 # extract binaries
 RUN unzip pingfederate-9.0.2.zip
@@ -18,6 +19,13 @@ RUN tar -xf server-jre-8u162-linux-x64.tar.gz
 # define this as an engine node
 RUN rm /opt/pingfederate-9.0.2/pingfederate/bin/run.properties 
 RUN cp -t /opt/pingfederate-9.0.2/pingfederate/bin /opt/run.properties 
+
+#Create logs on host
+#VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.0.2/pingfederate/log
+
+# enables dynamic clustering via S3 buckets
+#RUN rm /opt/pingfederate-9.0.2/pingfederate/server/default/conf/tcp.xml
+#RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/conf /opt/tcp.xml
 
 # cleanup installation files
 RUN rm /opt/pingfederate-9.0.2.zip && rm /opt/server-jre-8u162-linux-x64.tar.gz && rm /opt/run.properties
