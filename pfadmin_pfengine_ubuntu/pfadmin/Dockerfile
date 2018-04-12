@@ -10,6 +10,11 @@ WORKDIR /opt
 COPY server-jre-8u162-linux-x64.tar.gz /opt
 ADD pingfederate-9.0.2.zip /opt
 COPY run.properties /opt
+#COPY tcp.xml /opt
+
+# add configuration export if this is replacing existing configuration
+# note that this WILL NOT auto-import the license file
+COPY data.zip /opt
 
 # extract binaries
 RUN unzip pingfederate-9.0.2.zip
@@ -17,10 +22,23 @@ RUN tar -xf server-jre-8u162-linux-x64.tar.gz
 
 # define this as the cluster's PFAdmin node
 RUN rm /opt/pingfederate-9.0.2/pingfederate/bin/run.properties
-RUN cp -t /opt/pingfederate-9.0.2/pingfederate/bin /opt/run.properties 
+RUN cp -t /opt/pingfederate-9.0.2/pingfederate/bin /opt/run.properties
+
+# enables dynamic clustering via S3 buckets
+#RUN rm /opt/pingfederate-9.0.2/pingfederate/server/default/conf/tcp.xml
+#RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/conf /opt/tcp.xml
+
+# load saved configuration if this replaces existing configuration
+RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/data/drop-in-deployer /opt/data.zip
+
+#Create logs on host
+#VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.0.2/pingfederate/log  
 
 # cleanup installation files
 RUN rm /opt/pingfederate-9.0.2.zip && rm /opt/server-jre-8u162-linux-x64.tar.gz && rm /opt/run.properties
+
+# cleanup of old config if used
+RUN rm /opt/data.zip 
 
 # set JAVA_HOME
 ENV JAVA_HOME /opt/jdk1.8.0_162
