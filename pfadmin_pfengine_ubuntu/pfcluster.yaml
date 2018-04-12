@@ -1,7 +1,7 @@
 version: "3.5"
 services:
   pfadmin:
-    image: jrlehtinen/pfadmin:redadaptive
+    image: jrlehtinen/pfadmin:adaptive
     deploy:
       placement:
         constraints: [node.role == manager]
