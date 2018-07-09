@@ -29,10 +29,10 @@ RUN rm /opt/pingfederate-9.1.1/pingfederate/server/default/conf/tcp.xml
 RUN cp -t /opt/pingfederate-9.1.1/pingfederate/server/default/conf /opt/tcp.xml
 
 # load saved configuration if this replaces existing configuration
-#RUN cp -t /opt/pingfederate-9.0.2/pingfederate/server/default/data/drop-in-deployer /opt/data.zip
+#RUN cp -t /opt/pingfederate-9.1.1/pingfederate/server/default/data/drop-in-deployer /opt/data.zip
 
 #Create logs on host
-#VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.0.2/pingfederate/log  
+#VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.1.1/pingfederate/log  
 
 # cleanup installation files
 RUN rm /opt/pingfederate-9.1.1.tar.gz && rm /opt/jre8-172.tar.gz && rm /opt/run.properties

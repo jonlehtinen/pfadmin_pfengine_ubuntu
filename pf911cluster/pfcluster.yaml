@@ -1,7 +1,7 @@
 version: "3.5"
 services:
   pfadmin:
-    image: jrlehtinen/pfadmin:adaptive
+    image: jrlehtinen/pfadmin:911
     deploy:
       placement:
         constraints: [node.role == manager]
@@ -16,7 +16,7 @@ services:
     networks:
       - pfnet
   pfengine:
-    image: jrlehtinen/pfengine:adaptive
+    image: jrlehtinen/pfengine:911
     deploy:
       #placement:
         #constraints: [node.role == worker]
