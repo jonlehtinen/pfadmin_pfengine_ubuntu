@@ -1,4 +1,4 @@
-Deploys PingFederate 9.0.2 in clustered mode as docker stack on a docker swarm.
+Deploys PingFederate 9.1.1 in clustered mode as docker stack on a docker swarm.
 
 This repository defines the creation of a docker stack to run on a docker swarm that will run PingFederate 9.0.2. Be advised that the YAML file has not been tuned. Please make adjustments for your use case. I offer no warranties for this configuration.
 
@@ -19,4 +19,4 @@ Second: Zip the pingfederate directory within the pfadmin container and build a 
 Additional items to consider:
 
 Add additional IPs in run.properties within the subnet range for the pfnet overlay network for discovery if clusters are cycled through very rapidly to ensure continuity of replication.
-If deploying in AWS, enable dhynamic discovery and configure a S3 bucket for discovery in the tcp.xml file as indicated in run.properties.
+If deploying in AWS, enable dynamic discovery and configure a S3 bucket or the IAM tag description role on the resources for discovery in the tcp.xml file as indicated in run.properties.
