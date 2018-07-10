@@ -8,7 +8,7 @@ WORKDIR /opt
 
 # add binaries
 COPY jre8-172.tar.gz /opt
-COPY pingfederate-9.1.1.tar.gz /opt
+ADD pingfederate-9.1.1.zip /opt
 COPY run.properties /opt
 COPY tcp.xml /opt
 
@@ -17,7 +17,7 @@ COPY tcp.xml /opt
 #COPY data.zip /opt
 
 # extract binaries
-RUN tar -xf pingfederate-9.1.1.tar.gz
+RUN unzip pingfederate-9.1.1.zip
 RUN tar -xf jre8-172.tar.gz
 
 # define this as the cluster's PFAdmin node
@@ -35,7 +35,7 @@ RUN cp -t /opt/pingfederate-9.1.1/pingfederate/server/default/conf /opt/tcp.xml
 #VOLUME pflogs -v /home/ec2-user:/opt/pingfederate-9.1.1/pingfederate/log  
 
 # cleanup installation files
-RUN rm /opt/pingfederate-9.1.1.tar.gz && rm /opt/jre8-172.tar.gz && rm /opt/run.properties
+RUN rm /opt/pingfederate-9.1.1.zip && rm /opt/jre8-172.tar.gz && rm /opt/run.properties
 
 # cleanup of old config if used
 #RUN rm /opt/data.zip 
