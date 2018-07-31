@@ -10,13 +10,12 @@ This launches 3 services, a single pfadmin instance, pfengine instances, and the
 
 Additional docker nodes can be added to the swarm as additional compute is required, and the pfengine service can be scaled to accommodate the additional load using the docker service scale pfengine=<Number>. Additional pfengine containers will then be added to the swarm nodes in a round robin fashion based on the current count of containers running on each swarm node. The pfengine can be similarly scaled down using the same command.
 
-Once deployed and PingFederate configured with data stores, VIP, reverse proxies, and connections, you can save the configuration in one of two ways:
+The tcp.xml is configured to use the AWS tag discovery for cluster joining. The dockerfile and the tcp.xml may need to be adjusted to use a different clustering mechanism to match your use case.
 
-First: Use the Configuration Archive tool in the Administrative Console to export a ZIP file with the server configuration. Rename that file to data.zip and rebuild the image with that file in the dockerfile directory. Also uncomment the relevant sections of the dockerfile for copying and updating the data.zip to the drop-in-deployer. If you user persistant grants stored in an external DB, note that you will need to add a line to the dockerfile to manually copy the hivemodule.xml to pingfederate/server/default/conf/META-INF/ as this file is NOT currently exported using the Configuration Archive tool.
+The service now launches under a non-root user:group called pingfederate:pingfederate
 
-Second: Zip the pingfederate directory within the pfadmin container and build a new pfadmin: docker image with that zipped directory replacing the original pingfederate-9.0.2.zip file used in the original docker image referenced in my docker cloud repository. With creative scripting, one could arrange for this process to occur automatically so new admin container images with complete configurations could be created at intervals for convenient redeployment of the pfadmin service/instance.
-
-Additional items to consider:
-
-Add additional IPs in run.properties within the subnet range for the pfnet overlay network for discovery if clusters are cycled through very rapidly to ensure continuity of replication.
-If deploying in AWS, enable dynamic discovery and configure a S3 bucket or the IAM tag description role on the resources for discovery in the tcp.xml file as indicated in run.properties.
+Several additional sections have been commented out of the dockerfile, and can be enabled if you provide the files to customize your PingFederate deployment-
+1) The license file can be auto loaded.
+2) You can rebuild this image with an export of an existing PingFederate server configuration as data.zip to pre-load connection information into your containers.
+3) The main.css, html.form.login.template.html, companylogo.png and companyfont.zip can be added to enable branded logon pages.
+4) The hivemodule.xml and org.sourceid.oauth20.domain.ClientManagerJdbcImpl.xml can be updated to refer to a persistent PostgreSQL data store once configured. Udpate the dockerfile and your files with the appropriate driver and files if you are usign a different data store type, like MySQL.
