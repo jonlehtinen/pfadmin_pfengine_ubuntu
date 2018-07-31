@@ -1,5 +1,5 @@
 #!/bin/bash
-/opt/pingfederate-9.0.2/pingfederate/sbin/pingfederate-run.sh
+/opt/pingfederate-9.1.1/pingfederate/sbin/pingfederate-run.sh
 
 # wait indefinitely 
 sleep infinity
