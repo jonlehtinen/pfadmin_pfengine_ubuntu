@@ -12,7 +12,7 @@ This launches 3 services, a single pfadmin instance, pfengine instances, and the
 
 Additional docker nodes can be added to the swarm as additional compute is required, and the pfengine service can be scaled to accommodate the additional load using the docker service scale pfengine=<Number>. Additional pfengine containers will then be added to the swarm nodes in a round robin fashion based on the current count of containers running on each swarm node. The pfengine can be similarly scaled down using the same command.
 
-The tcp.xml is configured to use the AWS tag discovery for cluster joining. The dockerfile and the tcp.xml may need to be adjusted to use a different clustering mechanism to match your use case.
+The tcp.xml is configured to use the default IP range-based discovery for cluster joining. You can use the AWS tag discovery for cluster joining. The dockerfile and the tcp.xml may need to be adjusted to use a different clustering mechanism to match your use case.
 
 The service now launches under a non-root user:group called pingfederate:pingfederate
 
