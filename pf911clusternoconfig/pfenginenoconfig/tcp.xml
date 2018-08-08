@@ -32,9 +32,9 @@
             logical_addr_cache_reaper_interval="10000"
 
             bind_addr="${pf.cluster.bind.address}"/>
-    <!--<TCPPING initial_hosts="${pf.cluster.tcp.discovery.initial.hosts}"
+    <TCPPING initial_hosts="${pf.cluster.tcp.discovery.initial.hosts}"
              return_entire_cache="true"
-             port_range="0"/>-->
+             port_range="0"/>
 
     <!-- To enable discovery using a file stored in S3, comment out TCPPING, and uncomment the section below.
          Passwords and keys may be encrypted using PingFederate's obfuscate utility.
@@ -84,13 +84,13 @@
                       using PingFederate's obfuscate utility.
     -->
     
-	 <com.pingidentity.aws.AWS_PING
+	 <!-- <com.pingidentity.aws.AWS_PING
             port_number="${pf.cluster.bind.port}"
             tags="dynamiccluster"
             filters=""
             access_key=""
             secret_key=""
-            log_aws_error_messages="true"/>
+            log_aws_error_messages="true"/>-->
     
 
     <MERGE3 min_interval="30000" max_interval="60000" />
