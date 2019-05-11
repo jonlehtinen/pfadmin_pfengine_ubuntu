@@ -1,0 +1,2260 @@
+Description: >
+  This template deploys an autoscaling PingFed instance across as many as 3 regions. As written,
+  it assumes the VPC, public and private subnets, Internet Gateway, routes, and NAT Gateways are already
+  established and not created/maintained as part of CloudFormation stack that will maintain the PingFed
+  environment. As configured, this script will deploy the Production PingFed environment to ECS clusters 
+  in us-east-1, eu-west-1, and ap-southeast-1. Condition arguments remove componenents to help control 
+  costs in QA and dev environments.
+  Last Modified: 30 April 2019
+  Authors: Jon Lehtinen jon.lehtinen@thomsonreuters.com 
+  Sean Farrell S.Farrell@thomsonreuters.com
+  Alyssa Kelber alyssa.kelber@thomsonreuters.com
+
+Parameters:
+  EnvironmentType:
+    Type: String
+    AllowedValues: 
+      - prod
+      - qa
+      - dev
+
+# Populate with the IDs of the VPCs, subnets, and security groups that correspond to each environment. 
+# "WebWorldSecurityGroup," "WebCorpSecurityGroup," & "BastionSecurityGroup" map to security groups used in TR-managed VPCs. 
+# WebWorld allows webtraffic from the internet, WebCorp allows web traffic from corporate IP ranges, and Bastion allows SSH 
+# to EC2 hosts. Remove/replace with similar security groups for your environment.
+#
+# KeyPrincipal1 is the arn of the role that creates the CloudFormation resources in the stack. See the documenation for the policies
+# that role requires to execute this stack.
+#
+# LBCertID is the TLS certificate that will be used with the load balancers. Uplaod them to Certificate Manager from your internal 
+# certificate management tool, or use AWS provided certs. The LBCertID value is the suffix on the cert ARN- so for
+# arn:aws:acm:us-east-1:400400400400:certificate/40040040-1ac4-4355-bf40-400006b9a365 the LBCertID value is 40040040-1ac4-4355-bf40-400006b9a365.
+Mappings:
+  prod:
+    us-east-1:
+      MinClusterSize: 4
+      MaxClusterSize: 10
+      VPC: vpc-bd34ca48
+      AmersVPCCidrRange: 10.62.136.0/23
+      EmeaVPCCidrRange: 10.62.140.0/23
+      AspacVPCCidrRange: 10.60.162.0/23
+      SubnetPrivateA: subnet-bd34ca48
+      SubnetPrivateB: subnet-bd34ca48
+      SubnetPrivateC: subnet-bd34ca48
+      SubnetPublicA: subnet-bd34ca48
+      SubnetPublicB: subnet-bd34ca48
+      SubnetPublicC: subnet-bd34ca48
+      WebWorldSecurityGroup: sg-bd34ca48
+      WebCorpSecurityGroup: sg-bd34ca48
+      BastionSSHSecurityGroup: sg-bd34ca48
+      KeyPrincipal1: arn:aws:iam::400400400400:role/a205529-esso-cfrole-prod
+      LBCertID: 46177819-1ac4-4355-bf38-580706b9a365
+    eu-west-1:
+      MinClusterSize: 3
+      MaxClusterSize: 8
+      VPC: vpc-48bd34ca
+      AmersVPCCidrRange: 10.62.136.0/23
+      EmeaVPCCidrRange: 10.62.140.0/23
+      AspacVPCCidrRange: 10.60.162.0/23
+      SubnetPrivateA: subnet-48bd34ca
+      SubnetPrivateB: subnet-48bd34ca
+      SubnetPrivateC: subnet-48bd34ca
+      SubnetPublicA: subnet-48bd34ca
+      SubnetPublicB: subnet-48bd34ca
+      SubnetPublicC: subnet-48bd34ca
+      WebWorldSecurityGroup: sg-48bd34ca
+      WebCorpSecurityGroup: sg-48bd34ca
+      BastionSSHSecurityGroup: sg-48bd34ca
+      KeyPrincipal1: UNUSED
+      LBCertID: 46177819-1ac4-4355-bf38-580706b9a365
+    ap-southeast-1:
+      MinClusterSize: 3
+      MaxClusterSize: 8
+      VPC: vpc-48bd34ca
+      AmersVPCCidrRange: 10.62.136.0/23
+      EmeaVPCCidrRange: 10.62.140.0/23
+      AspacVPCCidrRange: 10.60.162.0/23
+      SubnetPrivateA: subnet-48bd34ca
+      SubnetPrivateB: subnet-48bd34ca
+      SubnetPrivateC: subnet-48bd34ca
+      SubnetPublicA: subnet-48bd34ca
+      SubnetPublicB: subnet-48bd34ca
+      SubnetPublicC: subnet-48bd34ca
+      WebWorldSecurityGroup: sg-48bd34ca
+      WebCorpSecurityGroup: sg-48bd34ca
+      BastionSSHSecurityGroup: sg-48bd34ca
+      KeyPrincipal1: UNUSED
+      LBCertID: 46177819-1ac4-4355-bf38-580706b9a365
+  qa:
+    us-east-1:
+      MinClusterSize: 3
+      MaxClusterSize: 4
+      VPC: vpc-53756d2b
+      AmersVPCCidrRange: 10.62.136.0/23
+      EmeaVPCCidrRange: 10.62.140.0/23
+      SubnetPrivateA: subnet-2aa37476
+      SubnetPrivateB: subnet-bf39e9d8
+      SubnetPrivateC: subnet-b0fd2c9e
+      SubnetPublicA: subnet-a6a275fa
+      SubnetPublicB: subnet-600ddd07
+      SubnetPublicC: subnet-0dff2e23
+      WebWorldSecurityGroup: sg-ce6aa5b9
+      WebCorpSecurityGroup: sg-417ab536
+      BastionSSHSecurityGroup: sg-4e14c739
+      KeyPrincipal1: arn:aws:iam::88888888888:role/a205485-esso-cfrole-use1-qa
+      # LBCert: arn:aws:acm:us-east-1:88888888888:certificate/1b9d62f5-4801-434a-8901-706a8124445c
+      LBCertID: 1b9d62f5-4801-434a-8901-706a8124445c
+    eu-west-1:
+      MinClusterSize: 1
+      MaxClusterSize: 3
+      VPC: vpc-9710dcf1
+      AmersVPCCidrRange: 10.62.136.0/23
+      EmeaVPCCidrRange: 10.62.140.0/23
+      SubnetPrivateA: subnet-d98b7583
+      SubnetPrivateB: subnet-5745f931
+      SubnetPrivateC: subnet-d1850999
+      SubnetPublicA: subnet-6e916f34
+      SubnetPublicB: subnet-9643fff0
+      SubnetPublicC: subnet-008b0748
+      WebWorldSecurityGroup: sg-5d36f127
+      WebCorpSecurityGroup: sg-c237f0b8
+      BastionSSHSecurityGroup: sg-e9419d93
+      KeyPrincipal1: UNUSED
+      # LBCert: arn:aws:acm:eu-west-1:88888888888:certificate/93dcd099-08db-49ec-ba14-a6802ebde741
+      LBCertID: 93dcd099-08db-49ec-ba14-a6802ebde741
+  dev:
+    us-east-1:
+      MinClusterSize: 3
+      MaxClusterSize: 4
+      VPC: vpc-53756d2b
+      AmersVPCCidrRange: 10.62.138.0/23
+      SubnetPrivateA: subnet-2aa37476
+      SubnetPrivateB: subnet-bf39e9d8
+      SubnetPrivateC: subnet-b0fd2c9e
+      SubnetPublicA: subnet-a6a275fa
+      SubnetPublicB: subnet-600ddd07
+      SubnetPublicC: subnet-0dff2e23
+      WebWorldSecurityGroup: sg-ce6aa5b9
+      WebCorpSecurityGroup: sg-417ab536
+      BastionSSHSecurityGroup: sg-4e14c739
+      KeyPrincipal1: arn:aws:iam::88888888888:role/a205466-esso-cfrole-dev
+      # LBCert: arn:aws:acm:us-east-1:88888888888:certificate/9fd52d37-b6fd-4a8f-a69d-3c78ebbc4eae
+      LBCertID: 9fd52d37-b6fd-4a8f-a69d-3c78ebbc4eae
+
+# These are the AWS region-specific mappings. The AMI ID is our "golden image" used with the EC2 hosts that compose the ECS cluster,
+# and gets updated here with each new release from our Cloud Team. TR has a default DBSubnetGroup provided in managed VPCs. Whether 
+# this value needs to be changed or created along with other resource will depend upon your environment. 
+  AWSRegionMappings:
+    us-east-1:
+      AWSRegionAbbreviation: use1
+      AvailabilityZoneA: us-east-1a
+      AvailabilityZoneB: us-east-1b
+      AvailabilityZoneC: us-east-1c
+      DBSubnetGroup: tr-vpc-1-db-subnetgroup
+      AMI: ami-7878a224d3be77878
+    eu-west-1:
+      AWSRegionAbbreviation: euw1
+      AvailabilityZoneA: eu-west-1a
+      AvailabilityZoneB: eu-west-1b
+      AvailabilityZoneC: eu-west-1c
+      DBSubnetGroup: UNUSED
+      AMI: ami-78787878a71599482
+    ap-southeast-1:
+      AWSRegionAbbreviation: aps1
+      AvailabilityZoneA: ap-southeast-1a
+      AvailabilityZoneB: ap-southeast-1b
+      AvailabilityZoneC: ap-southeast-1c
+      DBSubnetGroup: UNUSED
+      AMI: ami-59947878a71599482
+
+# These are mappings that vary based on the dev, qa, or prod AWS environment used. Some values may not vary if you use the same
+# AWS environment for all three environments. We use one environment for our lesser environments, and a different account for prod.
+#
+# These also have the Route53 HealthCheckIds, and must be populated here because the alarms can only be created 
+# in US-East-1, and the alarms attach themselves to healthchecks based on the ID. Be mindful if the HealthChecks are replaced 
+# that these values will need to be updated. The Alarms are grouped in the bottom of the Resources section of
+# this script, and should be commented out when standing up a new environment until all regions are initially
+# populated. Then the they can be uncommented, and the template ran again in US-East-1 for each environment.
+  EnvironmentTypeMappings:
+    prod:
+      AssetInsightID: 205529
+      AmersPrimaryHealthCheckId: aaaaaaaa-25fe-aaaa-b675-e626687aaaa
+      EmeaPrimaryHealthCheckId: dddddddd-25fe-aaaa-b675-e626687aaaa
+      AspacPrimaryHealthCheckId: gggggggg-25fe-aaaa-b675-e626687aaaa
+      AWSAccountID: 777777777777
+      DefaultExtHostedZone: tr-aws.thomsonreuters.com.
+      DefaultIntHostedZone: tr-aws-int.thomsonreuters.com.
+      ExtHostedZoneId: ZQASJUX6GP24VD
+      IntHostedZoneId: ZA24VKDJSKJHKS
+    qa:
+      AssetInsightID: 205485
+      AmersPrimaryHealthCheckId: aaaaaaaa-34fe-aaaa-b675-e626687aaaa
+      AmersSecondaryHealthCheckId: bbbbbbbb-34fe-aaaa-b675-e626687aaaa
+      EmeaPrimaryHealthCheckId: cccccccc-34fe-aaaa-b675-e626687aaaa
+      EmeaSecondaryHealthCheckId: ddddddddd-34fe-aaaa-b675-e626687aaaa
+      AWSAccountID: 888888888888
+      DefaultExtHostedZone: tr-aws-non-prod.thomsonreuters.com.
+      DefaultIntHostedZone: tr-aws-int-non-prod.thomsonreuters.com.
+      ExtHostedZoneId: Z6E2DT30PKEU3RD
+      IntHostedZoneId: Z5GKIS9FJWOD4ES
+    dev:
+      AssetInsightID: 205466
+      AmersPrimaryHealthCheckId: aaaaaaaa-64dd-aaaa-b675-e626687aaaa
+      AWSAccountID: 888888888888
+      DefaultExtHostedZone: tr-aws-non-prod.thomsonreuters.com.
+      DefaultIntHostedZone: tr-aws-int-non-prod.thomsonreuters.com.
+      ExtHostedZoneId: Z6E2DT30PKEU3RD
+      IntHostedZoneId: Z5GKIS9FJWOD4ES
+
+#Constants are constant across all environments and regions. These include instance size and some tagging variables.  
+  ConstantsMappings:
+    Constants:
+      ResourceOwner: Maudib@thomsonreuters.com
+      FinancialID: 55555555
+      InstanceType: c5.xlarge
+      OpsDG: "Maudib@thomsonreuters.com"
+
+#Conditions determine what components deploy in which region and environment, allowing a single codebase to work with dev,
+#qa, and production environments.
+Conditions:
+  IsProd:
+    !Equals [ !Ref EnvironmentType, prod ]
+  IsDev:
+    !Equals [ !Ref EnvironmentType, prod ]
+  IsUSEast1:
+    !Equals [ !Ref "AWS::Region", us-east-1 ]
+  IsEUWest1:
+    !Equals [ !Ref "AWS::Region", eu-west-1 ]
+  IsAPSoutheast1:
+    !Equals [ !Ref "AWS::Region", ap-southeast-1 ]
+  IsUSEast1NotDev:
+    !And
+      - !Or [ 
+          !Equals [ !Ref EnvironmentType, prod ],
+          !Equals [ !Ref EnvironmentType, qa ]
+      ]
+      - !Condition IsUSEast1
+  IsUSEast1Dev:
+    !And
+      - !Condition IsDev
+      - !Condition IsUSEast1
+  IsUSEast1Prod:
+    !And
+      - !Condition IsProd
+      - !Condition IsUSEast1
+  IsEUWest1Prod:
+    !And
+      - !Condition IsProd
+      - !Condition IsEUWest1
+
+#Resources define all the components created by CloudFormation.
+Resources:
+
+#Security Groups 
+  AdminLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsUSEast1
+    Description: This security group defines who/where is allowed to access the Admin ALB
+    Properties: 
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: AdminALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  AdminLoadBalancerIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsUSEast1
+    Description: Inbound rule for the Admin ALB, traffic limited to Bastion WebCorpSecurityGroup
+    DependsOn: AdminLoadBalancerSecurityGroup
+    Properties: 
+      FromPort: 443
+      ToPort: 443
+      GroupId: !Ref AdminLoadBalancerSecurityGroup
+      IpProtocol: TCP
+      SourceSecurityGroupId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebCorpSecurityGroup ]
+
+  AdminLoadBalancerEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Condition: IsUSEast1
+    Description: Outbound rule for Admin ALB, traffic goes to ECSHostSecurityGroup on 9999
+    DependsOn: AdminLoadBalancerSecurityGroup
+    Properties: 
+      FromPort: 9999
+      ToPort: 9999
+      GroupId: !Ref AdminLoadBalancerSecurityGroup
+      IpProtocol: TCP
+      DestinationSecurityGroupId: !Ref ECSHostSecurityGroup
+
+  EngineLoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Description: Security group for the Engine ALB
+    Properties: 
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      GroupDescription: Access to the load balancer that sits in front of ECS
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: EngineALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  EngineLoadBalancerIngressRule:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Ingress rule for the Engine ALB, takes traffic from Bastion WebWorld Security Group
+    DependsOn: EngineLoadBalancerSecurityGroup
+    Properties: 
+      FromPort: 443
+      ToPort: 443
+      GroupId: !Ref EngineLoadBalancerSecurityGroup
+      IpProtocol: TCP
+      SourceSecurityGroupId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebWorldSecurityGroup ]
+
+  EngineLoadBalancerEgressRule:
+    Type: AWS::EC2::SecurityGroupEgress
+    Description: Outbound rule for Engine ALB, traffic goes to ECSHostSecurityGroup on 9031
+    DependsOn: EngineLoadBalancerIngressRule
+    Properties: 
+      FromPort: 9031
+      ToPort: 9031
+      GroupId: !Ref EngineLoadBalancerSecurityGroup
+      IpProtocol: TCP
+      DestinationSecurityGroupId: !Ref ECSHostSecurityGroup
+
+  ECSHostSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Description: This security group defines who/where is allowed to access the ECS hosts directly.
+    DependsOn: 
+      - EngineLoadBalancerSecurityGroup
+    Properties: 
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      GroupDescription: Access to the ECS hosts and the tasks/containers that run on them
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: ECSHost
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+#The ingress rules that whitelist VPC ranges for inter-region node communication. These were hardcoded for our environment due to 
+#different AWS accounts & VPCs used with non-prod and prod deployments. If using a single AWS account or VPC, consider coding it as a 
+#mapped reference using !Ref.
+
+  ECSHostIngressRule1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the AMERS region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7600
+      ToPort: 7600
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AmersVPCCidrRange ]
+
+  ECSHostIngressRule2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the AMERS region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7601
+      ToPort: 7601
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AmersVPCCidrRange ]
+
+  ECSHostIngressRule3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the AMERS region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7500
+      ToPort: 7500
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AmersVPCCidrRange ]
+
+  ECSHostIngressRule4:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the AMERS region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7700
+      ToPort: 7700
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AmersVPCCidrRange ]
+
+  ECSHostIngressRule5:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows inbound traffic from the Engine ALB
+    DependsOn: 
+      - EngineLoadBalancerSecurityGroup
+      - EngineLoadBalancerEgressRule
+    Properties: 
+      FromPort: 9031
+      ToPort: 9031
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      SourceSecurityGroupId: !Ref EngineLoadBalancerSecurityGroup
+
+  ECSHostIngressRule6:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsUSEast1
+    Description: Allows inbound traffic from the Admin ALB
+    DependsOn: 
+      - AdminLoadBalancerSecurityGroup
+      - AdminLoadBalancerEgressRule
+    Properties: 
+      FromPort: 9999
+      ToPort: 9999
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      SourceSecurityGroupId: !Ref AdminLoadBalancerSecurityGroup
+
+  ECSHostIngressRule7:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows ssh access via the Bastion security group and cloud-tool
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 22
+      ToPort: 22
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      SourceSecurityGroupId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", BastionSSHSecurityGroup ]
+
+  ECSHostIngressRule8:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the EMEA region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7600
+      ToPort: 7600
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", EmeaVPCCidrRange ]
+
+  ECSHostIngressRule9:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the EMEA region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7601
+      ToPort: 7601
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", EmeaVPCCidrRange ]
+
+  ECSHostIngressRule10:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the EMEA region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7500
+      ToPort: 7500
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", EmeaVPCCidrRange ]
+
+  ECSHostIngressRule11:
+    Type: AWS::EC2::SecurityGroupIngress
+    Description: Allows traffic from nodes in the EMEA region
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      FromPort: 7700
+      ToPort: 7700
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", EmeaVPCCidrRange ]
+
+  ECSHostIngressRule12:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsProd
+    Description: Allows traffic from nodes in the ASPAC region
+    DependsOn: ECSHostSecurityGroup
+    Properties:
+      FromPort: 7600
+      ToPort: 7600
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AspacVPCCidrRange ]
+
+  ECSHostIngressRule13:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsProd
+    Description: Allows traffic from nodes in the ASPAC region
+    DependsOn: ECSHostSecurityGroup
+    Properties:
+      FromPort: 7601
+      ToPort: 7601
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AspacVPCCidrRange ]
+
+  ECSHostIngressRule14:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsProd
+    Description: Allows traffic from nodes in the ASPAC region
+    DependsOn: ECSHostSecurityGroup
+    Properties:
+      FromPort: 7500
+      ToPort: 7500
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AspacVPCCidrRange ]
+
+  ECSHostIngressRule15:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsProd
+    Description: Allows traffic from nodes in the ASPAC region
+    DependsOn: ECSHostSecurityGroup
+    Properties:
+      FromPort: 7700
+      ToPort: 7700
+      GroupId: !Ref ECSHostSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AspacVPCCidrRange ]
+
+#Security group for accessing the RDS instance used as the OAuth client & grant store
+
+  RDSOauthStoreSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: IsUSEast1
+    Description: This security group defines who/where is allowed to access the RDS data store directly.
+    DependsOn: ECSHostSecurityGroup
+    Properties: 
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      GroupDescription: Access to the RDS data store from the ECS Cluster
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: RDSOauthStore
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  RDSIngressRule1:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsUSEast1
+    Description: Allows inbound traffic from the ECS Cluster from AMERS region
+    DependsOn: 
+      - RDSOauthStoreSecurityGroup
+      - ECSHostSecurityGroup
+    Properties: 
+      FromPort: 5432
+      ToPort: 5432
+      GroupId: !Ref RDSOauthStoreSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AmersVPCCidrRange ]
+
+  RDSIngressRule2:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsUSEast1
+    Description: Allows inbound traffic from the ECS Cluster from EMEA region
+    DependsOn: 
+      - RDSOauthStoreSecurityGroup
+      - ECSHostSecurityGroup
+    Properties: 
+      FromPort: 5432
+      ToPort: 5432
+      GroupId: !Ref RDSOauthStoreSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", EmeaVPCCidrRange ]
+
+  RDSIngressRule3:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: IsUSEast1Prod
+    Description: Allows inbound traffic from the ECS Cluster from ASPAC region
+    DependsOn:
+      - RDSOauthStoreSecurityGroup
+      - ECSHostSecurityGroup
+    Properties:
+      FromPort: 5432
+      ToPort: 5432
+      GroupId: !Ref RDSOauthStoreSecurityGroup
+      IpProtocol: TCP
+      CidrIp: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", AspacVPCCidrRange ]
+
+#Application Load Balancers
+
+  AdminLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Condition: IsUSEast1
+    Description: Listener for the ALB for the PingFed Admin node
+    Properties:
+      LoadBalancerArn: !Ref AdminLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Sub 
+          - "arn:aws:acm:${AWS::Region}:${AWSAccountID}:certificate/${LBCertID}"
+          - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+            LBCertID: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", LBCertID ]
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref AdminTargetGroup
+
+  AdminLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Condition: IsUSEast1
+    Description: ALB for the PingFed Admin node
+    Properties:
+      Name: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: AdminALB
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      Subnets:
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicA ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicB ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicC ]
+      SecurityGroups: 
+        - !Ref AdminLoadBalancerSecurityGroup
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebCorpSecurityGroup ]
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: AdminALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  AdminTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Condition: IsUSEast1
+    Description: Target Group for the Admin ALB
+    Properties:
+      Name: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: Admin
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      Port: 9999
+      Protocol: HTTPS
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /pingfederate/app
+      HealthCheckPort: 9999
+      HealthCheckProtocol: HTTPS
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      TargetType: instance
+      UnhealthyThresholdCount: 4
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: AdminALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  EngineLoadBalancerListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Description: Listener for the ALB for the PingFed Engine nodes
+    Properties:
+      LoadBalancerArn: !Ref EngineLoadBalancer
+      Port: 443
+      Protocol: HTTPS 
+      Certificates:
+        - CertificateArn: !Sub 
+          - "arn:aws:acm:${AWS::Region}:${AWSAccountID}:certificate/${LBCertID}"
+          - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+            LBCertID: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", LBCertID ]
+      DefaultActions: 
+        - Type: forward
+          TargetGroupArn: !Ref EngineTargetGroup
+
+  EngineTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Description: Target Group for the Engine ALB
+    Properties:
+      Name: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: Engine
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      VpcId: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+      Port: 9031
+      Protocol: HTTPS
+      HealthCheckIntervalSeconds: 30
+      HealthCheckPath: /pf/heartbeat.ping
+      HealthCheckPort: 9031
+      HealthCheckProtocol: HTTPS
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      TargetType: instance
+      UnhealthyThresholdCount: 4
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: EngineALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  EngineLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Description: ALB for the PingFed Engine node
+    Properties:
+      Name: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: EngineALB
+      Scheme: internet-facing
+      Type: application
+      IpAddressType: ipv4
+      Subnets:
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicA ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicB ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicC ]
+      SecurityGroups: 
+        - !Ref EngineLoadBalancerSecurityGroup
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebWorldSecurityGroup ]
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: EngineALB
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+#ECS Cluster, ECS AutoScaling Group, ECS Group Role
+
+  # This IAM Role is attached to all of the ECS hosts. It is based on the default role
+  # published here:
+  # http://docs.aws.amazon.com/AmazonECS/latest/developerguide/instance_IAM_role.html
+  #
+  # You can add other IAM policy statements here to allow access from your ECS hosts
+  # to other AWS services. Please note that this role will be used by ALL containers
+  # running on the ECS host.
+
+  ECSRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: ECSRole
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies:
+        -
+          PolicyName: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: ECSRolePolicy
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - ecs:CreateCluster
+                  - ecs:DeregisterContainerInstance
+                  - ecs:DiscoverPollEndpoint
+                  - ecs:Poll
+                  - ecs:RegisterContainerInstance
+                  - ecs:StartTelemetrySession
+                  - ecs:Submit*
+                  - logs:CreateLogStream
+                  - logs:PutLogEvents
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:GetAuthorizationToken
+                  - ssm:DescribeAssociation
+                  - ssm:GetDeployablePatchSnapshotForInstance
+                  - ssm:GetDocument
+                  - ssm:GetManifest
+                  - ssm:GetParameters
+                  - ssm:ListAssociations
+                  - ssm:ListInstanceAssociations
+                  - ssm:PutInventory
+                  - ssm:PutComplianceItems
+                  - ssm:PutConfigurePackageResult
+                  - ssm:UpdateAssociationStatus
+                  - ssm:UpdateInstanceAssociationStatus
+                  - ssm:UpdateInstanceInformation
+                  - ec2messages:AcknowledgeMessage
+                  - ec2messages:DeleteMessage
+                  - ec2messages:FailMessage
+                  - ec2messages:GetEndpoint
+                  - ec2messages:GetMessages
+                  - ec2messages:SendReply
+                  - ec2:DescribeTags
+                  - ec2:DescribeInstanceAttribute
+                  - ec2:DescribeInstances
+                  - ec2:GetLaunchTemplateData
+                  - cloudwatch:PutMetricData
+                  - ec2:DescribeInstanceStatus
+                  - ds:CreateComputer
+                  - ds:DescribeDirectories
+                  - logs:CreateLogGroup
+                  - logs:CreateLogStream
+                  - logs:DescribeLogGroups
+                  - logs:DescribeLogStreams
+                  - logs:PutLogEvents
+                  - s3:PutObject
+                  - s3:GetObject
+                  - s3:AbortMultipartUpload
+                  - s3:ListMultipartUploadParts
+                  - s3:ListBucket
+                  - s3:ListBucketMultipartUploads
+                Resource: "*"
+
+  ECSInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref ECSRole
+
+  ECSServiceAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - application-autoscaling.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Path: /
+      Policies:
+        -
+          PolicyName: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: service-autoscaling
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                - application-autoscaling:*
+                - cloudwatch:DescribeAlarms
+                - cloudwatch:PutMetricAlarm
+                - ecs:DescribeServices
+                - ecs:UpdateService
+                Resource: "*"
+
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Description: The ECS cluster that will run the PingFed Services/Tasks/Containers
+    Properties:
+      ClusterName: !Sub 
+        - a${AssetInsightID}-esso
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+
+  ECSAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Description: The Autoscaling group that will add EC2 nodes to the ECS Cluster
+    Properties:
+      VPCZoneIdentifier:
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateA ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateB ]
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateC ]
+      LaunchConfigurationName: !Ref ECSLaunchConfiguration
+      MinSize: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", MinClusterSize ]
+      MaxSize: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", MaxClusterSize ]
+      DesiredCapacity: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", MinClusterSize ]
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: ECSNode
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+          PropagateAtLaunch: true
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          PropagateAtLaunch: true
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+          PropagateAtLaunch: true
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+          PropagateAtLaunch: true
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+          PropagateAtLaunch: true
+    CreationPolicy:
+      ResourceSignal:
+        Timeout: PT15M
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 1
+        PauseTime: PT15M
+        SuspendProcesses:
+          - HealthCheck
+          - ReplaceUnhealthy
+          - AZRebalance
+          - AlarmNotification
+          - ScheduledActions
+        WaitOnResourceSignals: true
+
+#The UserData setting sets a user that can ssh through the bastion service without a password. The TR golden images do not allow
+#the use of unmanaged certifcates or passwords for ssh, so this configuration is required. This may require adjustment based on your
+#use case.
+  ECSLaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Description: The launch configration for the EC2 instances that make up the ECS cluster
+    Properties:
+      ImageId: !FindInMap [AWSRegionMappings, !Ref "AWS::Region", AMI]
+      InstanceType: !FindInMap [ ConstantsMappings, Constants, InstanceType ]
+      SecurityGroups:
+        - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", BastionSSHSecurityGroup ]
+        - !Ref ECSHostSecurityGroup
+      IamInstanceProfile: !GetAtt ECSInstanceProfile.Arn
+      UserData:
+        "Fn::Base64": !Sub 
+          - |
+            #!/bin/bash
+            yum install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+            yum install -y aws-cfn-bootstrap hibagent
+            /opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration
+            /opt/aws/bin/cfn-signal -e $? --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSAutoScalingGroup
+            /usr/bin/enable-ec2-spot-hibernation
+            adduser a${AssetInsightID}-PowerUser2
+            echo "a${AssetInsightID}-PowerUser2 ALL=(ALL) NOPASSWD:ALL" >> /etc/sudoers.d/a${AssetInsightID}-PowerUser2
+          - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+
+    Metadata:
+      AWS::CloudFormation::Init:
+        config:
+          packages:
+            yum:
+              awslogs: []
+
+          commands:
+            01_add_instance_to_cluster:
+              command: !Sub echo ECS_CLUSTER=${ECSCluster} >> /etc/ecs/ecs.config
+          files:
+            "/etc/cfn/cfn-hup.conf":
+              mode: 000400
+              owner: root
+              group: root
+              content: !Sub |
+                [main]
+                stack=${AWS::StackId}
+                region=${AWS::Region}
+
+            "/etc/cfn/hooks.d/cfn-auto-reloader.conf":
+              content: !Sub |
+                [cfn-auto-reloader-hook]
+                triggers=post.update
+                path=Resources.ECSLaunchConfiguration.Metadata.AWS::CloudFormation::Init
+                action=/opt/aws/bin/cfn-init -v --region ${AWS::Region} --stack ${AWS::StackName} --resource ECSLaunchConfiguration
+
+            "/etc/awslogs/awscli.conf":
+              content: !Sub |
+                [plugins]
+                cwlogs = cwlogs
+                [default]
+                region = ${AWS::Region}
+
+            "/etc/awslogs/awslogs.conf":
+              content: !Sub |
+                [general]
+                state_file = /var/lib/awslogs/agent-state
+
+                [/var/log/dmesg]
+                file = /var/log/dmesg
+                log_group_name = ${ECSCluster}-/var/log/dmesg
+                log_stream_name = ${ECSCluster}
+
+                [/var/log/messages]
+                file = /var/log/messages
+                log_group_name = ${ECSCluster}-/var/log/messages
+                log_stream_name = ${ECSCluster}
+                datetime_format = %b %d %H:%M:%S
+
+                [/var/log/docker]
+                file = /var/log/docker
+                log_group_name = ${ECSCluster}-/var/log/docker
+                log_stream_name = ${ECSCluster}
+                datetime_format = %Y-%m-%dT%H:%M:%S.%f
+
+                [/var/log/ecs/ecs-init.log]
+                file = /var/log/ecs/ecs-init.log.*
+                log_group_name = ${ECSCluster}-/var/log/ecs/ecs-init.log
+                log_stream_name = ${ECSCluster}
+                datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+                [/var/log/ecs/ecs-agent.log]
+                file = /var/log/ecs/ecs-agent.log.*
+                log_group_name = ${ECSCluster}-/var/log/ecs/ecs-agent.log
+                log_stream_name = ${ECSCluster}
+                datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+                [/var/log/ecs/audit.log]
+                file = /var/log/ecs/audit.log.*
+                log_group_name = ${ECSCluster}-/var/log/ecs/audit.log
+                log_stream_name = ${ECSCluster}
+                datetime_format = %Y-%m-%dT%H:%M:%SZ
+
+          services:
+            sysvinit:
+              cfn-hup:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/cfn/cfn-hup.conf
+                  - /etc/cfn/hooks.d/cfn-auto-reloader.conf
+              awslogs:
+                enabled: true
+                ensureRunning: true
+                files:
+                  - /etc/awslogs/awslogs.conf
+                  - /etc/awslogs/awscli.conf
+      Tags: 
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: CF
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+#Scaling policy is based on CPU as task attachment is based on ALB healthcheck, and there was an issue setting scaling on the same
+#metric used to determine task health.
+  ECSAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Description: Autoscaling policy that keeps the EC2 nodes under the ECS cluster close to 50% CPU utilization (accounts for Admin node)
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref ECSAutoScalingGroup
+      Cooldown: 300
+      EstimatedInstanceWarmup: 180
+      PolicyType: TargetTrackingScaling
+      TargetTrackingConfiguration:
+        DisableScaleIn: False
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: 50
+
+#ECS Service Definitions
+
+  ClusteredConsoleService:
+    Type: AWS::ECS::Service
+    Condition: IsUSEast1
+    Description: Clustered Console service that runs on the ECS cluster
+    Properties:
+      ServiceName: ClusteredConsole
+      Cluster: !Ref ECSCluster
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 50
+      Role: !Ref ECSServiceRole
+      DesiredCount: 1
+      TaskDefinition: !Ref AdminTaskDefinition
+      LoadBalancers:
+        - ContainerName: "pfadmin"
+          ContainerPort: 9999
+          TargetGroupArn: !Ref AdminTargetGroup
+    DependsOn: 
+      - AdminLoadBalancer
+      - AdminTargetGroup
+      - AdminLoadBalancerListener
+
+#Consider adding the LogConfiguration under ContainerDefinitions to stream to CloudWatch or another service
+  AdminTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: IsUSEast1
+    Description: Task definition for the Clustered Console service
+    Properties:
+      Cpu: 4096
+      Memory: 7626
+      Family: !Sub ${EnvironmentType}-pfadmin
+      NetworkMode: host
+      ContainerDefinitions:
+        - Name: pfadmin
+          Essential: true
+          Memory: 7626
+          Cpu: 4096
+          Image: !Sub 
+            - "${AWSAccountID}.dkr.ecr.${AWS::Region}.amazonaws.com/a${AssetInsightID}-${ECRImageName}:latest"
+            - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+              AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ECRImageName: pfadmin
+          PortMappings:
+            - ContainerPort: 9999
+
+  ClusteredEngineService:
+    Type: AWS::ECS::Service
+    Description: Clustered Engine service that runs on the ECS cluster
+    Properties:
+      ServiceName: ClusteredEngine
+      Cluster: !Ref ECSCluster
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MaximumPercent: 300
+        MinimumHealthyPercent: 50
+      Role: !Ref ECSServiceRole
+      DesiredCount: !If [ IsProd, 2, 1]
+      TaskDefinition: !Ref EngineTaskDefinition
+      # PlacementStrategies:
+      #  - Type: spread
+      #  Field: attribute:ecs.availability-zone
+      LoadBalancers:
+        - ContainerName: "pfengine"
+          ContainerPort: 9031
+          TargetGroupArn: !Ref EngineTargetGroup
+    DependsOn: 
+      - EngineLoadBalancer
+      - EngineTargetGroup
+      - EngineLoadBalancerListener
+
+  EngineTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Description: Task definition for the Clustered Engine service
+    Properties:
+      Cpu: 4096
+      Memory: 7626
+      Family: !Sub ${EnvironmentType}-pfengine
+      NetworkMode: host
+      ContainerDefinitions:
+        - Name: pfengine
+          Essential: true
+          Memory: 7626
+          Cpu: 4096
+          Image: !Sub 
+            - "${AWSAccountID}.dkr.ecr.${AWS::Region}.amazonaws.com/a${AssetInsightID}-${ECRImageName}:latest"
+            - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+              AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ECRImageName: pfengine
+          PortMappings:
+            - ContainerPort: 9031
+
+# Provisioner Task Definition, used for outbound provisioning. Attaches to the Engine ALB.
+
+  ProvisionerService:
+    Type: AWS::ECS::Service
+    Condition: IsUSEast1
+    Description: Engine that does outbound provisioning
+    Properties:
+      ServiceName: Provisioner
+      Cluster: !Ref ECSCluster
+      LaunchType: EC2
+      DeploymentConfiguration:
+        MaximumPercent: 100
+        MinimumHealthyPercent: 50
+      Role: !Ref ECSServiceRole
+      DesiredCount: !If [ IsProd, 1, 1]
+      TaskDefinition: !Ref ProvisionerTaskDefinition
+      # PlacementStrategies:
+      #  - Type: spread
+      #  Field: attribute:ecs.availability-zone
+      LoadBalancers:
+        - ContainerName: "pfprovisioner"
+          ContainerPort: 9031
+          TargetGroupArn: !Ref EngineTargetGroup
+    DependsOn: 
+      - EngineLoadBalancer
+      - EngineTargetGroup
+      - EngineLoadBalancerListener
+
+  ProvisionerTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Condition: IsUSEast1
+    Description: Task definition for the Outbound Provisioner Engine service
+    Properties:
+      Cpu: 4096
+      Memory: 7626
+      Family: !Sub ${EnvironmentType}-pfprovisioner
+      NetworkMode: host
+      ContainerDefinitions:
+        - Name: pfprovisioner
+          Essential: true
+          Memory: 7626
+          Cpu: 4096
+          Image: !Sub 
+            - "${AWSAccountID}.dkr.ecr.${AWS::Region}.amazonaws.com/a${AssetInsightID}-${ECRImageName}:latest"
+            - AWSAccountID: !If [ IsProd, 751317295400, 728336755756 ]
+              AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ECRImageName: pfprovisioner
+          PortMappings:
+            - ContainerPort: 9031
+#Clustered Engine Service autoscaling policy and target
+
+  ClusteredEngineServiceScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Description: Clustered Engine Service Scaling Target
+    DependsOn: ClusteredEngineService
+    Properties:
+      ServiceNamespace: ecs
+      MaxCapacity: !If [ IsProd, 9, 3 ]
+      MinCapacity: !If [ IsProd, 2, 1 ]
+      ResourceId: !Join 
+        - /
+        - - service
+          - !Ref ECSCluster
+          - !GetAtt ClusteredEngineService.Name
+      RoleARN: !GetAtt [ECSServiceAutoScalingRole, Arn]
+      ScalableDimension: ecs:service:DesiredCount
+
+  ClusteredServiceScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Description: Clustered Engine Service autoscaling policy
+    Properties:
+      PolicyName: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: TargetTrackingPolicy
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref ClusteredEngineServiceScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ECSServiceAverageCPUUtilization
+        DisableScaleIn: False
+        ScaleInCooldown: 3600
+        ScaleOutCooldown: 300
+        TargetValue: 60
+
+  # This IAM Role grants the service access to register/unregister with the 
+  # Application Load Balancer (ALB). It is based on the default documented here:
+  # http://docs.aws.amazon.com/AmazonECS/latest/developerguide/service_IAM_role.html
+  ECSServiceRole: 
+    Type: AWS::IAM::Role
+    Properties: 
+      RoleName: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: ecsService
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      Path: /
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service:
+                - ecs.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        -
+          PolicyName: !Sub 
+            # - a${AssetInsightID}-esso-${ResourceName}-${AWS::StackName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: ecsService
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              -
+                Effect: Allow
+                Action:
+                  - ec2:AuthorizeSecurityGroupIngress
+                  - ec2:Describe*
+                  - elasticloadbalancing:RegisterTargets
+                  - elasticloadbalancing:ConfigureHealthCheck
+                  - ecr:GetDownloadUrlForLayer
+                  - ecr:BatchGetImage
+                  - ecr:GetAuthorizationToken
+                  - elasticloadbalancing:Describe*
+                  - elasticloadbalancing:DeregisterTargets
+                  - elasticloadbalancing:DeregisterInstancesFromLoadBalancer
+                  - elasticloadbalancing:RegisterInstancesWithLoadBalancer
+                  - ecr:BatchCheckLayerAvailability
+                Resource: "*"
+
+#KMS Secret for encrypting the Oauth RDS store
+
+  RDSEncryptionKey:
+    Type: AWS::KMS::Key
+    Condition: IsUSEast1
+    Description: Key for encryption of the persistent Oauth data store
+    Properties:
+      Enabled: true
+      EnableKeyRotation: false
+      KeyPolicy: 
+        Version: "2012-10-17"
+        Id: !Sub 
+          - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+          - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+            ResourceName: KMSRDS
+        Statement: 
+        - 
+          Sid: "Allow administration of the key"
+          Effect: "Allow"
+          Principal: 
+            AWS:
+              - !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", KeyPrincipal1 ]
+              # - !Ref KeyPrincipal2
+          Action: 
+            - "kms:Create*"
+            - "kms:Describe*"
+            - "kms:Enable*"
+            - "kms:List*"
+            - "kms:Put*"
+            - "kms:Update*"
+            - "kms:Revoke*"
+            - "kms:Disable*"
+            - "kms:Get*"
+            - "kms:Delete*"
+            - "kms:ScheduleKeyDeletion"
+            - "kms:CancelKeyDeletion"
+          Resource: "*"
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: RDSkey
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  RDSEncryptionKeyAlias:
+    Type: AWS::KMS::Alias
+    Condition: IsUSEast1
+    Properties:
+      AliasName: !Sub 
+        - "alias/a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}"
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: KMSRDS
+      TargetKeyId: !Ref RDSEncryptionKey
+
+#Secrets Manager-managed MasterPassword for OAuth persistent data store
+  
+  RDSPassword:
+    Type: AWS::SecretsManager::Secret
+    Condition: IsUSEast1
+    Properties:
+      Name: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: RDSPassword
+      Description: RDS instance master password
+      GenerateSecretString: 
+        ExcludeUppercase: False
+        RequireEachIncludedType: True
+        IncludeSpace: False
+        GenerateStringKey: "password"
+        PasswordLength: 30
+        ExcludePunctuation: False
+        ExcludeLowercase: False
+        SecretStringTemplate: !Sub 
+          - '{"username": "a${AssetInsightID}Esso"}'
+          - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        ExcludeNumbers: False
+      Tags:    
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: RDSkey
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+#Aurora Cluster plus RDS instances for OAuth persistent data store
+
+  OauthRDSCluster:
+    Type: AWS::RDS::DBCluster
+    Condition: IsUSEast1
+    DependsOn: RDSEncryptionKey
+    Properties:
+      DatabaseName: !Sub 
+        - a${AssetInsightID}oauth${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+      MasterUsername: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSPassword, ':SecretString:username}}' ]]
+      MasterUserPassword: !Join ['', ['{{resolve:secretsmanager:', !Ref RDSPassword, ':SecretString:password}}' ]]
+      Engine: aurora-postgresql
+      EngineVersion: 10.4
+      BackupRetentionPeriod: 7
+      DBSubnetGroupName: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", DBSubnetGroup ]
+      DBClusterParameterGroupName:
+        Ref: RDSDBClusterParameterGroup
+      KmsKeyId: !Ref RDSEncryptionKey
+      StorageEncrypted: true
+      Port: 5432
+      VpcSecurityGroupIds:
+        - !Ref RDSOauthStoreSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: essoOauthStore
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  RDSDBInstance1:
+    Type: AWS::RDS::DBInstance
+    Condition: IsUSEast1
+    Properties:
+      DBInstanceIdentifier: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: rds1
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      DBSubnetGroupName: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", DBSubnetGroup ]
+      DBParameterGroupName:
+        Ref: RDSDBParameterGroup
+      Engine: aurora-postgresql
+      DBClusterIdentifier:
+        Ref: OauthRDSCluster
+      PubliclyAccessible: 'false'
+      AvailabilityZone: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AvailabilityZoneB ]
+      DBInstanceClass: db.r4.large
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: RDSInstance1
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  # We don't need a read replica for dev or QA
+  RDSDBInstance2:
+    Type: AWS::RDS::DBInstance
+    Condition: IsUSEast1Prod
+    Properties:
+      DBInstanceIdentifier: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: rds2
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      DBSubnetGroupName: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", DBSubnetGroup ]
+      DBParameterGroupName:
+        Ref: RDSDBParameterGroup
+      Engine: aurora-postgresql
+      DBClusterIdentifier:
+        Ref: OauthRDSCluster
+      PubliclyAccessible: 'false'
+      AvailabilityZone: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AvailabilityZoneA ]
+      DBInstanceClass: db.r4.large
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: RDSInstance2
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  RDSDBClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Condition: IsUSEast1
+    Properties:
+      Description: Parameter group for Oauth store DB cluster
+      Family: aurora-postgresql10
+      Parameters:
+        timezone: UTC
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: rdsClusterParamGroup
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  RDSDBParameterGroup:
+    Type: AWS::RDS::DBParameterGroup
+    Condition: IsUSEast1
+    Properties:
+      Description: Parameter group for Oauth RDS instances
+      Family: aurora-postgresql10
+      Parameters:
+        application_name: !Sub 
+          - a${AssetInsightID}-esso
+          - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: rdsParamGroup
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+#This attaches the RDSPassword to the OauthRDSCluster
+
+  RDSDBSecretTargetAttachment:
+    Type: "AWS::SecretsManager::SecretTargetAttachment"
+    Condition: IsUSEast1
+    Properties:
+      SecretId: !Ref RDSPassword
+      TargetId: !Ref OauthRDSCluster
+      TargetType: AWS::RDS::DBCluster
+
+#Route53 record set to alias the ephemeral componenents behind route53 dns names. Point your enterprise DNS to the Route53 aliases,
+#and the Route53 aliases point to the DNS names of the resources that are created by the template.
+
+  OAuthStoreAlias:
+    Type: AWS::Route53::RecordSet
+    Condition: IsUSEast1
+    Properties: 
+      HostedZoneId: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, IntHostedZoneId ]
+      Name: !Sub 
+        - oauth-${EnvironmentType}.${DefaultIntHostedZone}
+        - DefaultIntHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultIntHostedZone ]
+      Type: CNAME
+      TTL: 60
+      ResourceRecords:
+        - !GetAtt OauthRDSCluster.Endpoint.Address
+
+# SNS Topic for alerting
+
+  SNSTopic: 
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: !Sub 
+        - a${AssetInsightID}-esso-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+      Subscription: 
+        - 
+          Endpoint: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+          Protocol: email
+        - 
+          Endpoint: !FindInMap [ ConstantsMappings, Constants, OpsDG ]
+          Protocol: email
+
+# Route53 healthchecks for failover
+
+  DNSHealthCheckAMERSFailoverPrimary: 
+    Type: AWS::Route53::HealthCheck
+    Condition: IsUSEast1
+    Properties: 
+      HealthCheckConfig: 
+        Port: "443"
+        Type: "HTTPS_STR_MATCH"
+        SearchString: "OK"
+        ResourcePath: "/pf/heartbeat.ping"
+        FullyQualifiedDomainName: !Sub 
+          - sso-${EnvironmentType}.${DefaultExtHostedZone}
+          - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]     
+        RequestInterval: !If [ IsDev, 30, 10 ]
+        FailureThreshold: "3"
+      HealthCheckTags: 
+        - 
+          Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: enginecheckAMERSPrimary
+        - 
+          Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        -
+          Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        -
+          Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        -
+          Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+  DNSHealthCheckEMEAFailoverPrimary: 
+    Type: AWS::Route53::HealthCheck
+    Condition: IsEUWest1
+    Properties: 
+      HealthCheckConfig: 
+        Port: "443"
+        Type: "HTTPS_STR_MATCH"
+        SearchString: "OK"
+        ResourcePath: "/pf/heartbeat.ping"
+        FullyQualifiedDomainName: !Sub 
+          - sso-${EnvironmentType}.${DefaultExtHostedZone}
+          - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]     
+        RequestInterval: !If [ IsDev, 30, 10 ]
+        FailureThreshold: "3"
+      HealthCheckTags: 
+        - 
+          Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: enginecheckEMEAPrimary
+        - 
+          Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        -
+          Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        -
+          Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        -
+          Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+ 
+  DNSHealthCheckASPACFailoverPrimary: 
+    Type: AWS::Route53::HealthCheck
+    Condition: IsAPSoutheast1
+    Properties: 
+      HealthCheckConfig: 
+        Port: "443"
+        Type: "HTTPS_STR_MATCH"
+        SearchString: "OK"
+        ResourcePath: "/pf/heartbeat.ping"
+        FullyQualifiedDomainName: !Sub 
+          - sso-${EnvironmentType}.${DefaultExtHostedZone}
+          - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]     
+        RequestInterval: !If [ IsDev, 30, 10 ]
+        FailureThreshold: "3"
+      HealthCheckTags: 
+        - 
+          Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: enginecheckASPACPrimary
+        - 
+          Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        -
+          Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        -
+          Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        -
+          Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+
+# Route53 primary and secondary aliases for failover
+
+  EngineALBAliasAMERSFailoverPrimary:
+    Condition: IsUSEast1
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-amers-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Amers route to ${AWS::Region}
+      Type: A
+      Weight: 100
+      #Failover: PRIMARY
+      AliasTarget:
+        HostedZoneId: !GetAtt EngineLoadBalancer.CanonicalHostedZoneID
+        DNSName: !Sub
+          - dualstack.${ALBDNSName}
+          - ALBDNSName: !GetAtt EngineLoadBalancer.DNSName
+        EvaluateTargetHealth: false
+      HealthCheckId: !Ref DNSHealthCheckAMERSFailoverPrimary
+
+  EngineALBAliasEMEAFailoverPrimary:
+    Condition: IsEUWest1
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-emea-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Primary emea route to ${AWS::Region}
+      Type: A
+      Weight: 100
+      # Failover: PRIMARY
+      AliasTarget:
+        HostedZoneId: !GetAtt EngineLoadBalancer.CanonicalHostedZoneID
+        DNSName: !Sub
+          - dualstack.${ALBDNSName}
+          - ALBDNSName: !GetAtt EngineLoadBalancer.DNSName
+        EvaluateTargetHealth: false
+      HealthCheckId: !Ref DNSHealthCheckEMEAFailoverPrimary
+
+  EngineALBAliasASPACFailoverPrimary:
+    Condition: IsAPSoutheast1
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-aspac-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Primary aspac route to ${AWS::Region}
+      Type: A
+      Weight: 100
+      # Failover: PRIMARY
+      AliasTarget:
+        HostedZoneId: !GetAtt EngineLoadBalancer.CanonicalHostedZoneID
+        DNSName: !Sub
+          - dualstack.${ALBDNSName}
+          - ALBDNSName: !GetAtt EngineLoadBalancer.DNSName
+        EvaluateTargetHealth: false
+      HealthCheckId: !Ref DNSHealthCheckASPACFailoverPrimary
+
+  EngineALBAliasAMERS:
+    Type: AWS::Route53::RecordSet
+    Condition: IsUSEast1
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Latency routes to ${AWS::Region}
+      Type: A
+      Region: !Ref "AWS::Region"
+      AliasTarget:
+        HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+        DNSName: !Ref EngineALBAliasAMERSFailoverPrimary
+        EvaluateTargetHealth: true
+
+  EngineALBAliasEMEA:
+    Condition: IsEUWest1
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Latency routes to ${AWS::Region}
+      Type: A
+      Region: !Ref "AWS::Region"
+      AliasTarget:
+        HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+        DNSName: !Ref EngineALBAliasEMEAFailoverPrimary
+        EvaluateTargetHealth: true
+
+  EngineALBAliasASPAC:
+    Condition: IsAPSoutheast1
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+      Name: !Sub 
+        - sso-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Latency routes to ${AWS::Region}
+      Type: A
+      Region: !Ref "AWS::Region"
+      AliasTarget:
+        HostedZoneId: [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+        DNSName: !Ref EngineALBAliasASPACFailoverPrimary
+        EvaluateTargetHealth: true
+
+  AdminALBAlias:
+    Type: AWS::Route53::RecordSet
+    Condition: IsUSEast1
+    Properties:
+      HostedZoneName: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      Comment: !Sub Routes to ${AWS::Region}
+      Name: !Sub 
+        - ssoadmin-${EnvironmentType}.${DefaultExtHostedZone}
+        - DefaultExtHostedZone: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+      SetIdentifier: !Sub Routes to ${AWS::Region}
+      Type: A
+      Region: !Ref "AWS::Region"
+      AliasTarget:
+        HostedZoneId: !GetAtt AdminLoadBalancer.CanonicalHostedZoneID
+        DNSName: !GetAtt AdminLoadBalancer.DNSName
+        EvaluateTargetHealth: false
+
+# S3 bucket for used with the export.sh script that runs on the admin node. This is where the server configurations are exported
+# at intervals, as well as where the admin node pulls the latest configuration at startup.
+
+  ExtractBucket:
+    Type: AWS::S3::Bucket
+    Condition: IsUSEast1
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: extract
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: 
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      LifecycleConfiguration:
+          Rules:
+            - Id: 30DayDelete
+              ExpirationInDays: 30
+              Status: Enabled
+      Tags:
+        - Key: Name
+          Value: !Sub 
+            - a${AssetInsightID}-esso-${ResourceName}-${AWSRegionAbbreviation}-${EnvironmentType}
+            - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+              ResourceName: rdsClusterParamGroup
+              AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+# S3 bucket for uploading this CF template so it can be run via AWS CLI commands
+
+  CFTemplateBucket:
+    Type: AWS::S3::Bucket
+    Condition: IsUSEast1
+    DeletionPolicy: Delete
+    Properties:
+      BucketName: !Sub 
+        - a${AssetInsightID}-esso-${ResourceName}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          ResourceName: cftemplates
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: 
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      Tags:
+        - Key: tr:application-asset-insight-id
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        - Key: tr:environment-type
+          Value: !Ref EnvironmentType
+        - Key: tr:resource-owner
+          Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+        - Key: tr:financial-identifier
+          Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+
+# CloudWatch Operational Monitoring Alarms
+
+  ExtractBucketAlarm:
+    Description: Alerts if the expected count of objects dips below a month's worth of exports
+    Condition: IsUSEast1
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SNSTopic
+      AlarmDescription: Count of extracts in the S3 bucket
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${AlarmDesc}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AlarmDesc: s3extract
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ] 
+      ComparisonOperator: LessThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: BucketName
+          Value: !Ref ExtractBucket
+        - Name: StorageType
+          Value: AllStorageTypes
+      EvaluationPeriods: 3
+      MetricName: NumberOfObjects
+      Namespace: AWS/S3
+      OKActions:
+        - !Ref SNSTopic
+      Period: 3600
+      Statistic: Average
+      Threshold: 1400.0
+      TreatMissingData: breaching
+
+  EngineALB5XXAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SNSTopic
+      AlarmDescription: 5XX count per engine ALB
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${AlarmDesc}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AlarmDesc: engineALB5XX
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ] 
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref EngineLoadBalancer
+      EvaluationPeriods: 3
+      MetricName: HTTPCode_ELB_5XX_Count
+      Namespace: AWS/ApplicationELB
+      OKActions:
+        - !Ref SNSTopic
+      Period: 60
+      Statistic: Average
+      Threshold: 10.0
+      TreatMissingData: notBreaching
+    
+  AdminALB5XXAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsUSEast1
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SNSTopic
+      AlarmDescription: 5XX count per admin ALB
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${AlarmDesc}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AlarmDesc: adminALB5XX
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ] 
+      ComparisonOperator: GreaterThanThreshold
+      DatapointsToAlarm: 3
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !Ref AdminLoadBalancer
+      EvaluationPeriods: 3
+      MetricName: HTTPCode_ELB_5XX_Count
+      Namespace: AWS/ApplicationELB
+      OKActions:
+        - !Ref SNSTopic
+      Period: 60
+      Statistic: Average
+      Threshold: 10.0
+      TreatMissingData: notBreaching
+
+  ClusteredEngineServiceMemoryUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SNSTopic
+      AlarmDescription: ClusteredEngine task memory utilization
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${AlarmDesc}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AlarmDesc: EngineServiceMem
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ] 
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      # DatapointsToAlarm: 3
+      Dimensions:
+        - Name: ServiceName
+          Value: !Ref ClusteredEngineService
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+      EvaluationPeriods: 1
+      MetricName: MemoryUtilization
+      Namespace: AWS/ECS
+      OKActions:
+        - !Ref SNSTopic
+      Period: 300
+      Statistic: Average
+      Threshold: 80.0
+      TreatMissingData: missing
+
+  ClusteredConsoleServiceMemoryUsageAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsUSEast1
+    Properties:
+      ActionsEnabled: true
+      AlarmActions:
+        - !Ref SNSTopic
+      AlarmDescription: ClusteredConsole task memory utilization
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${AlarmDesc}-${AWSRegionAbbreviation}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          AlarmDesc: ConsoleServiceMem
+          AWSRegionAbbreviation: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ] 
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      # DatapointsToAlarm: 3
+      Dimensions:
+        - Name: ServiceName
+          Value: !Ref ClusteredConsoleService
+        - Name: ClusterName
+          Value: !Ref ECSCluster
+      EvaluationPeriods: 1
+      MetricName: MemoryUtilization
+      Namespace: AWS/ECS
+      OKActions:
+        - !Ref SNSTopic
+      Period: 300
+      Statistic: Average
+      Threshold: 80.0
+      TreatMissingData: missing
+
+# Cloudwatch alarms for Route53 healthchecks, must create on US-East-1 to attach correctly and alert. These
+# should be commented out the first time the template is run. The
+    
+  AmersFailoverPrimaryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsUSEast1
+    Properties:
+      AlarmDescription: Route53 Failover Alarm
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${R53Route}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          R53Route: AmersFailoverPrimaryAlarm
+      Namespace: "AWS/Route53"
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AmersPrimaryHealthCheckId ]
+      ComparisonOperator: LessThanThreshold
+      Period: 60
+      EvaluationPeriods: 3
+      Statistic: Minimum
+      Threshold: 1.0
+      AlarmActions:
+        - !Ref SNSTopic
+
+  EMEAFailoverPrimaryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsUSEast1NotDev
+    Properties:
+      AlarmDescription: Route53 Failover Alarm
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${R53Route}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          R53Route: EMEAFailoverPrimaryAlarm
+      Namespace: "AWS/Route53"
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, EmeaPrimaryHealthCheckId ]
+      ComparisonOperator: LessThanThreshold
+      Period: 60
+      EvaluationPeriods: 3
+      Statistic: Minimum
+      Threshold: 1.0
+      AlarmActions:
+        - !Ref SNSTopic
+
+  ASPACFailoverPrimaryAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: IsUSEast1Prod
+    Properties:
+      AlarmDescription: Route53 Failover Alarm
+      AlarmName: !Sub 
+        - a${AssetInsightID}-esso-${R53Route}-${EnvironmentType}
+        - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+          R53Route: ASPACFailoverPrimaryAlarm
+      Namespace: "AWS/Route53"
+      MetricName: HealthCheckStatus
+      Dimensions:
+        - Name: HealthCheckId
+          Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AspacPrimaryHealthCheckId ]
+      ComparisonOperator: LessThanThreshold
+      Period: 60
+      EvaluationPeriods: 3
+      Statistic: Minimum
+      Threshold: 1.0
+      AlarmActions:
+        - !Ref SNSTopic
+
+Outputs:
+  EnvironmentType:
+    Value: !Ref EnvironmentType
+  AWSRegion:
+    Value: !Ref "AWS::Region"
+  AssetInsightID:
+    Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+  IsProd:
+    Value: !If [ IsProd, true, false ]
+  EnvironmentName:
+    Value: !Sub 
+      - a${AssetInsightID}-esso
+      - AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+  AWSRegionAbbreviation:
+    Value: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AWSRegionAbbreviation ]
+  AvailabilityZoneA:
+    Value: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AvailabilityZoneA ]
+  AvailabilityZoneB:
+    Value: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AvailabilityZoneB ]
+  AvailabilityZoneC:
+    Value: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", AvailabilityZoneC ]
+  DBSubnetGroup:
+    Value: !FindInMap [ AWSRegionMappings, !Ref "AWS::Region", DBSubnetGroup ]
+  ExtHostedZoneId:
+    Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, ExtHostedZoneId ]
+  IntHostedZoneId:
+    Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, IntHostedZoneId ]
+  DesiredEngineTasks:
+    Value: !If [ IsProd, 3, 1]
+  EngineServiceMinCapacity:
+    Value: !If [ IsProd, 3, UNUSED ]
+  EngineServiceMaxCapacity:
+    Value: !If [ IsProd, 9, 3 ]
+  DefaultIntHostedZone:
+    Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultIntHostedZone ]
+  DefaultExtHostedZone:
+    Value: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, DefaultExtHostedZone ]
+  AdminContainerImage:
+    Value: !Sub 
+      - "${AWSAccountID}.dkr.ecr.${AWS::Region}.amazonaws.com/a${AssetInsightID}-${ECRImageName}:latest"
+      - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+        AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        ECRImageName: pfadmin
+  EngineContainerImage:
+    Value: !Sub 
+      - "${AWSAccountID}.dkr.ecr.${AWS::Region}.amazonaws.com/a${AssetInsightID}-${ECRImageName}:latest"
+      - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+        AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+        ECRImageName: pfengine
+  VPC:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", VPC ]
+  SubnetPrivateA:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateA ]
+  SubnetPrivateB:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateB ]
+  SubnetPrivateC:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPrivateC ]
+  SubnetPublicA:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicA ]
+  SubnetPublicB:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicB ]
+  SubnetPublicC:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", SubnetPublicC ]
+  WebWorldSecurityGroup:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebWorldSecurityGroup ]
+  WebCorpSecurityGroup:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", WebCorpSecurityGroup ]
+  BastionSSHSecurityGroup:
+    Value: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", BastionSSHSecurityGroup ]
+  LBCert: 
+    Value: !Sub 
+      - "arn:aws:acm:${AWS::Region}:${AWSAccountID}:certificate/${LBCertID}"
+      - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+        LBCertID: !FindInMap [ !Ref EnvironmentType, !Ref "AWS::Region", LBCertID ]
+  KeyPrincipal1:
+    Value: !Sub 
+      - "arn:aws:iam::${AWSAccountID}:role/a${AssetInsightID}-esso-cfrole-${EnvironmentType}"
+      - AWSAccountID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AWSAccountID ]
+        AssetInsightID: !FindInMap [ EnvironmentTypeMappings, !Ref EnvironmentType, AssetInsightID ]
+  ResourceOwner:
+    Value: !FindInMap [ ConstantsMappings, Constants, ResourceOwner ]
+    # Value: ISRM-IAM-SSOMFA@thomsonreuters.com
+  FinancialID:
+    Value: !FindInMap [ ConstantsMappings, Constants, FinancialID ]
+    # Value: 985893725
+  InstanceType:
+    Value: !FindInMap [ ConstantsMappings, Constants, InstanceType ]
+    # Value: c5.xlarge
