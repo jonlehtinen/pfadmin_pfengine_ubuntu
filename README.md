@@ -51,9 +51,10 @@ The CloudFormation template assumes there are already three peered VPCs in three
 Upload a multi-SAN certificate into AWS Certificate Manager that can be used for TLS on both the AdminALB and the EngineALB. In this example the certificate works with ssoadmin.thomsonreuters.com and sso.thomsonreuters.com. This must be done for each region. The LBCertID value is the trailing string in the ARN of that certificate after upload- so for arn:aws:acm:us-east-1:400400400400:certificate/40040040-1ac4-4355-bf40-400006b9a365 the LBCertID value is 40040040-1ac4-4355-bf40-400006b9a365. Alternatively, you could choose to use AWS own's certificate service and update the CloudFormation template accordingly.
 
 ### ECR repositories
-You will need to create Elastic Container Repositories in the AMERS, EMEA, and ASPAC regions labeled with the Asset Insight ID number you set for your environment. The AMERS region will need one labeled pfadmin and pfengine. EMEA and ASPAC will only need pfengine. If your prod AAID is 205529, you would name the AMERS ECR repos:
+You will need to create Elastic Container Repositories in the AMERS, EMEA, and ASPAC regions labeled with the Asset Insight ID number you set for your environment. The AMERS region will need one labeled pfadmin, pfengine, and pfprovisioner. EMEA and ASPAC will only need pfengine. If your prod AAID is 205529, you would name the AMERS ECR repos:
 - a205529-pfadmin
 - a205529-pfengine
+- a205529-pfprovisioner
 
 ### CloudFormation IAM Role
 Create a role that will be used to run and manage the resources created by the CloudFormation template. Prefix this role with your Asset Insight ID. If your dev AAID were 205529, name the role a205529-cfrrole-dev. This template touches many services, so it needs many permissions. The simplest way to ensure the template can run is to attach the following prebuilt AWS policies:
